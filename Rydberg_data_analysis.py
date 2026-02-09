@@ -62,9 +62,7 @@ df_clean = pd.DataFrame(rows)
 
 sigma_theta = np.radians((224.65-224.4833333)/2)
 
-# 2. Instrumental uncertainty (1 arc minute division)
-# We often use half the smallest division for precision, or the full division
-# for 'worst-case' instrumental error. Let's use 1 arc min:
+
 sigma_inst = np.radians(1/60) 
 
 # 3. Combined angular uncertainty
@@ -103,6 +101,19 @@ for run in runs:
             coeffs, cov = np.polyfit(m_vals, sin_vals, deg=1, w=1/sigma_sin_theta, cov=True)
             slope_m_sin = coeffs[0]
             intercept = coeffs[1]
+            
+            # Predicted values
+            sin_fit = slope_m_sin * m_vals + intercept
+
+            # Chi-squared
+            chi2 = np.sum(((sin_vals - sin_fit) / sigma_sin_theta)**2)
+        
+            # Degrees of freedom
+            dof = len(m_vals) - 2
+        
+            # Reduced chi-squared
+            chi2_red = chi2 / dof
+            
             sigma_slope_m_sin = np.sqrt(cov[0,0])
 
             lamda = slope_m_sin * (1/(N*1e3))  # if you want λ = slope * d, adjust d as needed
@@ -118,7 +129,9 @@ for run in runs:
                 "slope": slope_m_sin,
                 "intercept": intercept,
                 "lambda": lamda,
-                "sigma_lambda": sigma_lamda
+                "sigma_lambda": sigma_lamda,
+                "chi2": chi2,
+                "chi2_red": chi2_red
             })
 
             # Optional: plot
@@ -132,7 +145,7 @@ for run in runs:
             plt.grid(True)
             plt.show()
 
-# Convert results to DataFrame
+
 results_df = pd.DataFrame(results)
 summary_df = results_df.groupby(['colour', 'N']).agg({
     'lambda': 'mean',
@@ -154,12 +167,12 @@ summary_df['n2'] = summary_df['colour'].map(color_to_n2)
 summary_df["x"] = (1/(summary_df["n2"])**2) - 0.25
 summary_df["1/lambda"] = 1 / summary_df["lambda"]
 
-# Level 2 Propagation: sigma_{1/lambda} = sigma_lambda / lambda^2
+
 summary_df["y_err"] = summary_df["sigma_lambda"] / (summary_df["lambda"]**2)
 
-# 3. Final Plots (Example for N=300)
+
 # --- 3. Final Plots (N=300) ---
-plt.figure(figsize=(8, 5)) # Create a fresh figure
+plt.figure(figsize=(8, 5)) 
 n300_df = summary_df[summary_df['N'] == 300]
 coeffs_300, cov_300 = np.polyfit(n300_df["x"], n300_df["1/lambda"], 1, cov=True)
 sigma_R_300 = np.sqrt(cov_300[0,0])
@@ -170,11 +183,14 @@ plt.plot(n300_df["x"], coeffs_300[0]*n300_df["x"] + coeffs_300[1],
          linestyle='--', color='tab:blue', 
          label=f"$R_H = {abs(coeffs_300[0]):.4e} \pm {sigma_R_300:.1e}$")
 plt.title("Rydberg Plot for N = 300")
+plt.xlabel("x")
+plt.ylabel("1/lambda (m^-1)")
+plt.grid()
 plt.legend()
 plt.show()
 
 # --- 4. Final Plots (N=80) ---
-plt.figure(figsize=(8, 5)) # Create another fresh figure
+plt.figure(figsize=(8, 5)) 
 n80_df = summary_df[summary_df['N'] == 80]
 coeffs_80, cov_80 = np.polyfit(n80_df["x"], n80_df["1/lambda"], 1, cov=True)
 sigma_R_80 = np.sqrt(cov_80[0,0])
@@ -183,8 +199,11 @@ plt.errorbar(n80_df["x"], n80_df["1/lambda"], yerr=n80_df["y_err"],
              fmt='o', capsize=5, label="Data points", color='green')
 plt.plot(n80_df["x"], coeffs_80[0]*n80_df["x"] + coeffs_80[1], 
          linestyle='--', color='red', 
-         label=f"$R_H = {abs(coeffs_80[0]):.4e} \pm {sigma_R_80:.1e}$") # Fixed variables here
+         label=f"$R_H = {abs(coeffs_80[0]):.4e} \pm {sigma_R_80:.1e}$") 
 plt.title("Rydberg Plot for N = 80")
+plt.xlabel("x")
+plt.ylabel("1/lambda (m^-1)")
+plt.grid()
 plt.legend()
 plt.show()
 
@@ -216,4 +235,4 @@ print(f"  R_H = ({RH_80:.4e} ± {sigma_R_80:.3e}) m^-1")
 print(f"  Accuracy: {perc_diff_80:.3f}% difference from true value")
 print("="*40)
 
-print(perc_diff_80/perc_diff_300)
+print(results_df[["run", "colour", "N", "chi2", "chi2_red"]])
